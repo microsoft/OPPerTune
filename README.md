@@ -1,33 +1,113 @@
-# Project
+# OPPerTune
 
-> This repo has been populated by an initial template to help get you started. Please
-> make sure to update the content to build a great experience for community-building.
+OPPerTune is an RL framework that enables systems and service developers to automatically tune various configuration
+parameters and other heuristics in their codebase, rather than manually-tweaking, over time in deployment. It provides
+easy-to-use API and is driven by bandit-style RL & online gradient-descent algorithms.
 
-As the maintainer of this project, please make a few updates:
+## Prerequisites
 
-- Improving this README.MD file to provide a great experience
-- Updating SUPPORT.MD with content about this project's support experience
-- Understanding the security reporting process in SECURITY.MD
-- Remove this section from the README
+- Python 3 (>= 3.8)
+
+## Installation
+
+Install the latest version of pip
+
+```bash
+python3 -m pip install --upgrade pip
+```
+
+To setup the package locally, run
+
+```bash
+pip install .
+```
+
+## Usage
+
+```python
+# File: src/algorithms/python/examples/bluefin/example.py
+import numpy as np
+from oppertune import OPPerTune
+
+
+def get_reward(pred) -> float:
+    """Negative squared loss."""
+    target = np.array([1, 700])
+    return -np.square(pred - target).sum() / (1000 ** 2)
+
+
+def main():
+    parameters = (
+        {
+            'type': 'discrete',
+            'name': 'p1',
+            'initial_value': 5,
+            'lb': 0,
+            'ub': 10,
+        },
+        {
+            'type': 'continuous',
+            'name': 'p2',
+            'initial_value': 100.0,
+            'lb': 100.0,
+            'ub': 900.0,
+            'step_size': 100.0,
+        },
+    )
+
+    # Initialize an instance of OPPerTune
+    tuner = OPPerTune(
+        algorithm='bluefin',
+        parameters=parameters,
+        algorithm_args=dict(
+            feedback=2,
+            eta=0.01,
+            delta=0.1,
+            random_seed=4
+        )
+    )
+
+    num_iterations = 100
+
+    for i in range(num_iterations):
+        # Predict the next set of perturbed parameters
+        pred, _metadata = tuner.predict()
+
+        # Receive feedback
+        reward = get_reward(np.asarray([pred['p1'], pred['p2']]))
+
+        # Send the feedback to OPPerTune for the gradient update
+        tuner.set_reward(reward, metadata=_metadata)
+
+        if i % 25 == 0:
+            print(f'Round={i}, Reward={reward}, Pred=({pred["p1"]:d}, {pred["p2"]:.4f}),'
+                  f' Best=({tuner.backend.w_center[0]:.4f}, {tuner.backend.w_center[1]:.4f})')
+
+
+if __name__ == '__main__':
+    main()
+```
 
 ## Contributing
 
-This project welcomes contributions and suggestions.  Most contributions require you to agree to a
-Contributor License Agreement (CLA) declaring that you have the right to, and actually do, grant us
-the rights to use your contribution. For details, visit https://cla.opensource.microsoft.com.
+### Setup
 
-When you submit a pull request, a CLA bot will automatically determine whether you need to provide
-a CLA and decorate the PR appropriately (e.g., status check, comment). Simply follow the instructions
-provided by the bot. You will only need to do this once across all repos using our CLA.
+```bash
+pip install -e "./[dev]"
+```
 
-This project has adopted the [Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct/).
-For more information see the [Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/) or
-contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additional questions or comments.
+### Style guide
 
-## Trademarks
+To ensure your code follows the style guidelines, install `black>=23.1` and `isort>=5.12`
 
-This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft 
-trademarks or logos is subject to and must follow 
-[Microsoft's Trademark & Brand Guidelines](https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks/usage/general).
-Use of Microsoft trademarks or logos in modified versions of this project must not cause confusion or imply Microsoft sponsorship.
-Any use of third-party trademarks or logos are subject to those third-party's policies.
+```shell
+pip install black>=23.1
+pip install isort>=5.12
+```
+
+then run,
+
+```shell
+isort . --sp=pyproject.toml
+black . --config=pyproject.toml
+```
