@@ -1,9 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Wed Jul 20 11:50:02 2022
-
-@author: mayukhdas
-"""
 from copy import deepcopy
 from typing import Any, List, Optional, Tuple, Union
 

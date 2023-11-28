@@ -20,12 +20,12 @@ classifiers = [
 ]
 dependencies = [
     "gymnasium>=0.26",
+    "hyperopt>=0.2.7",
     "joblib>=1.3",
     "numpy>=1.19",
     "scikit-optimize>=0.9",
     "torch>=1.13",
     "vowpalwabbit>=9.4.0",
-    "hyperopt>=0.2.7",
 ]
 
 [project.urls]

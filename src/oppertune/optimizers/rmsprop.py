@@ -23,7 +23,7 @@ class RMSprop(Optimizer):
         self.buffer: np.ndarray = 0
 
     def get_step_value(self, grad: np.ndarray):
-        """Implementation picked up from https://pytorch.org/docs/stable/generated/torch.optim.RMSprop.html."""
+        """Reference: https://pytorch.org/docs/stable/generated/torch.optim.RMSprop.html"""
         self.square_average *= self.alpha
         self.square_average += (1 - self.alpha) * (grad**2)
 

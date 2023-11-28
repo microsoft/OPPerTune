@@ -1,9 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Wed Jul 20 12:59:39 2022
-
-@author: mayukhdas
-"""
 from typing import Dict, List, Union
 
 import numpy as np

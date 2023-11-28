@@ -1,9 +1,10 @@
+import os
 import unittest
 from functools import partial
 
 import numpy as np
 
-from oppertune import ContinuousValue, DiscreteValue, OPPerTune
+from oppertune import ContinuousValue, DiscreteValue, OPPerTune, dump, load
 
 
 class TestBluefin(unittest.TestCase):
@@ -920,3 +921,59 @@ class TestBluefin(unittest.TestCase):
         for idx, values in enumerate(param_values):
             for param in parameters:
                 self.assertAlmostEqual(values[param.name], _EXPECTED_PARAM_VALUES[idx][param.name])
+
+    def test_pickling(self):
+        """Test if the tuner can be pickled."""
+
+        def get_reward(prediction: np.ndarray):
+            """Absolute Loss."""
+            target = np.array([2, 8])
+            return -np.abs(prediction - target).sum() / 10
+
+        parameters = (
+            DiscreteValue(
+                name="p1",
+                initial_value=4,
+                lb=1,
+                ub=10,
+            ),
+            ContinuousValue(
+                name="p2",
+                initial_value=4,
+                lb=1,
+                ub=10,
+            ),
+        )
+
+        tuner = OPPerTune(
+            algorithm="bluefin",
+            parameters=parameters,
+            algorithm_args=dict(
+                feedback=2,
+                eta=0.01,
+                delta=0.1,
+                random_seed=2,
+            ),
+        )
+
+        fname = "tuner.joblib"
+        dump(tuner, fname)
+
+        num_iterations = 100
+
+        for _ in range(num_iterations):
+            pred, _metadata = tuner.predict()
+            reward = get_reward(np.asarray(list(pred.values())))
+            tuner.set_reward(reward, metadata=_metadata)
+
+            tuner_obj = load(fname)
+            pred_obj, _metadata_obj = tuner_obj.predict()
+            reward_obj = get_reward(np.asarray(list(pred_obj.values())))
+            tuner_obj.set_reward(reward_obj, metadata=_metadata_obj)
+
+            self.assertDictEqual(pred, pred_obj)
+            self.assertEqual(reward, reward_obj)
+            self.assertEqual(_metadata, _metadata_obj)
+
+            dump(tuner_obj, fname)
+        os.remove(fname)

@@ -1,9 +1,10 @@
+import os
 import random
 import unittest
 
 import numpy as np
 
-from oppertune import ContinuousValue, DiscreteValue, OPPerTune
+from oppertune import ContinuousValue, DiscreteValue, OPPerTune, dump, load
 
 
 class TestDGT(unittest.TestCase):
@@ -788,3 +789,78 @@ class TestDGT(unittest.TestCase):
                         assert (
                             (p.ub - pred_value) / p.step_size
                         ).is_integer(), f"[{p.name}] Invalid predicted value, not reachable using ub={p.ub}"
+
+    def test_pickling(self):
+        """Test if the tuner can be pickled."""
+
+        def get_reward(pred: np.ndarray):
+            _OPTIMAL_PARAM = np.asarray([100, 500, 900])
+            return -np.sqrt(np.mean(np.square(pred - _OPTIMAL_PARAM)))
+
+        random_seed = 4
+
+        parameters = (
+            ContinuousValue(
+                name="p1",
+                initial_value=500,
+                lb=0.0,
+                ub=1000.0,
+            ),
+            ContinuousValue(
+                name="p2",
+                initial_value=300,
+                lb=0.0,
+                ub=1000.0,
+            ),
+            ContinuousValue(
+                name="p3",
+                initial_value=100,
+                lb=0.0,
+                ub=1000.0,
+            ),
+        )
+
+        features = [
+            {
+                "name": "jobtype",
+                "values": (0, 1, 2, 3),
+            },
+        ]
+
+        tuner = OPPerTune(
+            algorithm="dgt",
+            parameters=parameters,
+            algorithm_args=dict(
+                features=features,
+                height=2,
+                feedback=2,
+                eta1=0.01,
+                eta2=0.01,
+                delta=0.1,
+                random_seed=random_seed,
+                optimizer="rmsprop",
+            ),
+        )
+
+        fname = "tuner.joblib"
+        dump(tuner, fname)
+
+        num_iterations = 100
+
+        for _ in range(num_iterations):
+            jobtype = random.choice(features[0]["values"])
+            pred, _metadata = tuner.predict(features={"jobtype": jobtype})
+            reward = get_reward(np.asarray(list(pred.values())))
+            tuner.set_reward(reward, metadata=_metadata)
+
+            tuner_obj = load(fname)
+            pred_obj, _metadata_obj = tuner_obj.predict(features={"jobtype": jobtype})
+            reward_obj = get_reward(np.asarray(list(pred_obj.values())))
+            tuner_obj.set_reward(reward_obj, metadata=_metadata_obj)
+
+            self.assertDictEqual(pred, pred_obj)
+            self.assertEqual(reward, reward_obj)
+            self.assertEqual(_metadata, _metadata_obj)
+
+            dump(tuner_obj, fname)
+        os.remove(fname)
