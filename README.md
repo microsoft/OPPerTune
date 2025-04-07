@@ -33,24 +33,21 @@ OPPerTune is a framework that enables configuration tuning of applications, incl
 
 ### Prerequisites
 
-- Python 3 (>= 3.7)
+- Python 3 (>= 3.8)
 
-1. Install the latest version of `pip` and `setuptools`
+1. Install the latest version of `pip`, `setuptools` and `wheel`.
 
     ```bash
-    python3 -m pip install --upgrade pip setuptools
+    python -m pip install --upgrade pip setuptools wheel
     ```
+
+1. Install the `oppertune-core` package from the `oppertune-core` folder.
 
 1. To setup the package locally, run
 
     ```bash
-    python3 -m pip install .
-    ```
-
-    Or
-
-    ```bash
-    python3 -m pip install git+https://github.com/microsoft/OPPerTune.git
+    cd oppertune-algorithms
+    pip install .
     ```
 
 ## Tour of the OPPerTune package
@@ -63,76 +60,57 @@ We define the parameters of the system to be tuned. To specify a parameter, you 
 
 - `name`: The name of the parameter.
 
-- `initial_value`: The initial value of the parameter.
+- `val`: The initial value of the parameter.
 
-- `lb`: The lower bound value that the parameter can take.
+- `min`: The minimum value that the parameter can take.
 
-- `ub`: The upper bound value that the parameter can take.
+- `max`: The maximum value that the parameter can take.
 
-- `step_size` (optional): The minimum amount by which a parameter's value can be perturbed. In the example below, the values for `p2` are restricted to `(100, 200, 300, ... 900)` because we have specified a `step_size` of `100`. For `ContinuousValue`, the default `step_size` is `None`, which indicates any arbitrary amount of perturbation, whereas for `DiscreteValue`, the default (and also the minimum) value for `step_size` is `1`.
+- `step` (optional): The minimum amount by which a parameter's value can be perturbed. In the example below, the values for `p2` are restricted to `(100, 200, 300, ... 900)` because we have specified a `step` of `100`. For `Real`, the default `step` is `None`, which indicates any arbitrary amount of perturbation, whereas for `Integer`, the default (and also the minimum) value for `step` is `1`.
 
 #### Categorical parameters
 
 - `name`: The name of the parameter
 
-- `initial_value`: The initial value of the parameter
+- `val`: The initial value of the parameter
 
-- `categories`: The list of allowed values (atleast 2)
+- `categories`: The list of allowed values (at least 2)
 
 ```python
-from oppertune import CategoricalValue, ContinuousValue, DiscreteValue
+from oppertune.core.values import Categorical, Integer, Real
 
 parameters = [
-    ContinuousValue(
-        name="p1",
-        initial_value=0.45,
-        lb=0.0,
-        ub=1.0,
-    ),
-    DiscreteValue(
-        name="p2",
-        initial_value=100
-        lb=100,
-        ub=900,
-        step_size=100,
-    ),
-    CategoricalValue(
-        name="p3",
-        initial_value="medium",
-        categories=["low", "medium", "high"]
-    )
+    Categorical(name="p1", val="medium", categories=("low", "medium", "high")),
+    Integer(name="p2", val=100, min=100, max=900, step=100),
+    Real(name="p3", val=0.45, min=0.0, max=1.0),
 ]
 ```
 
-### 2. Choosing the algorithm
+### 2. Creating an instance of OPPerTune
 
 ```python
-algorithm = "hybrid_solver"  # Supports continuous, discrete and categorical parameters
+from oppertune.algorithms.hybrid_solver import HybridSolver
 
-algorithm_args = dict(
-    numerical_solver="bluefin",  # For the numerical (continuous and discrete) parameters
-    numerical_solver_args=dict(
+# We are using the HybridSolver algorithm for this example.
+# It supports categorical, integer and real parameters
+
+tuning_instance = HybridSolver(
+    parameters,
+    categorical_algorithm="exponential_weights_slates",  # For the categorical parameters
+    categorical_algorithm_args=dict(
+        random_seed=123,  # For reproducibility
+    ),
+    numerical_algorithm="bluefin",  # For the numerical (integer and real) parameters
+    numerical_algorithm_args=dict(
         feedback=2,
         eta=0.01,
         delta=0.1,
-        random_seed=123,  # Just for reproducibility
-    ),
-    categorical_solver="exponential_weights_slates",  # For the categorical parameters
-    categorical_solver_args=dict(
-        random_seed=123,  # Just for reproducibility
+        random_seed=123,  # For reproducibility
     ),
 )
 ```
 
-### 3. Creating an instance of OPPerTune
-
-```python
-from oppertune import OPPerTune
-
-tuner = OPPerTune(parameters, algorithm, algorithm_args)
-```
-
-### 4. Configuring the app to use OPPerTune's predictions
+### 3. Configuring the app to use OPPerTune's predictions
 
 #### Before
 
@@ -143,18 +121,18 @@ app.set_config(...)
 #### After
 
 ```python
-prediction, metadata = tuner.predict()
+prediction, request_id = tuning_instance.predict()
 app.set_config(prediction)
 
 # prediction will be a dictionary, with the keys as the names of the parameters
 # and the values as the ones predicted by OPPerTune.
 # E.g., {"p1": 0.236, "p2": 300, "p3": "medium"}
 
-# metadata is any additional (possibly None) data required by the algorithm.
-# This should always be passed back in the set_reward call.
+# request_id is a unique ID generated for each prediction.
+# It should be used for providing reward for the prediction via the `store_reward` API.
 ```
 
-### 5. Reward formulation
+### 4. Reward formulation
 
 OPPerTune uses a reward to compute an update to the parameter values. This reward needs to be a function of the metrics (e.g., throughput, latency) of the current state of the system.
 
@@ -164,19 +142,25 @@ def calculate_reward(metrics) -> float:
     We assume that the metrics of concern for us are latency and throughput.
     There can be more (or less) metrics that you may want to optimize for as well.
     """
-    latency = metrics["latency"]
-    throughput = metrics["throughput"]
 
-    # Higher the throughput, higher the reward
-    # Lower the latency, higher the reward
-    reward = throughput / latency
+    # Higher the throughput, higher the reward.
+    # Lower the latency, higher the reward.
+    reward: float = metrics.throughput / metrics.latency
 
-    # (Optional) You can scale the reward to [0, 1]
-    # reward = sigmoid(reward)
+    # (Optional) You should scale the reward to [0, 1].
+    # One way would be linearly scale down the reward
+    # by dividing it by the max achievable reward.
+    # You can normalize your reward in other ways as well.
+
+    # Lets say the best achievable throughput is 1000 requests/second
+    # and the best latency is 5 ms
+    max_possible_reward: float = 1000 / 5
+
+    reward /= max_possible_reward  # reward now in [0, 1]
     return reward
 ```
 
-### 6. Reconfigure and deploy
+### 5. Reconfigure and deploy
 
 Start observing the metrics and deploy the app.
 
@@ -186,17 +170,33 @@ app.deploy()  # Using the new parameter values. Wait till the app finishes the j
 metrics = metrics_monitor.stop()
 ```
 
-### 7. Sending the reward back to OPPerTune for its prediction
+### 6. Calculate the reward
 
 ```python
-reward = calculate_reward(metrics)
-tuner.set_reward(reward, metatadata)
+reward: float = calculate_reward(metrics)
 ```
 
-### 8. Putting together all the pieces in a tuning loop
+### 7. Store the reward for the corresponding request ID
 
 ```python
-from oppertune import CategoricalValue, ContinuousValue, DiscreteValue, OPPerTune
+tuning_instance.store_reward(request_id, reward)
+```
+
+This is useful in scenarios where you wish to call `predict` multiple times before calling `set_reward`.
+By storing the reward, you can access the list of tuning requests and the stored reward using `get_tuning_requests`, aggregate the reward and finally call `set_reward`.
+
+### 8. Sending the (aggregated) reward back to OPPerTune for its prediction
+
+```python
+tuning_instance.set_reward(reward)
+```
+
+### 9. Putting together all the pieces in a tuning loop
+
+```python
+from oppertune.algorithms.hybrid_solver import HybridSolver
+from oppertune.core.values import Categorical, Integer, Real
+
 
 def calculate_reward(metrics):
     latency = metrics["latency"]
@@ -213,44 +213,28 @@ def calculate_reward(metrics):
 
 def main():
     parameters = [
-        ContinuousValue(
-            name="p1",
-            initial_value=0.45,
-            lb=0.0,
-            ub=1.0,
-        ),
-        DiscreteValue(
-            name="p2",
-            initial_value=100
-            lb=100,
-            ub=900,
-            step_size=100,
-        ),
-        CategoricalValue(
-            name="p3",
-            initial_value="medium",
-            categories=["low", "medium", "high"]
-        )
+        Categorical(name="p1", val="medium", categories=("low", "medium", "high")),
+        Integer(name="p2", val=100, min=100, max=900, step=100),
+        Real(name="p3", val=0.45, min=0.0, max=1.0),
     ]
     
-    algorithm="hybrid_solver"  # Supports continuous, discrete and categorical parameters
-
-    algorithm_args=dict(
-        numerical_solver="bluefin",  # For the numerical (continuous and discrete) parameters
-        numerical_solver_args=dict(
+    tuning_instance = HybridSolver(
+        parameters,
+        categorical_algorithm="exponential_weights_slates",  # For the categorical parameters
+        categorical_algorithm_args=dict(
+            random_seed=123,  # For reproducibility
+        ),
+        numerical_algorithm="bluefin",  # For the numerical (integer and real) parameters
+        numerical_algorithm_args=dict(
             feedback=2,
             eta=0.01,
             delta=0.1,
-            random_seed=123,  # Just for reproducibility
-        ),
-        categorical_solver="exponential_weights_slates",  # For the categorical parameters
-        categorical_solver_args=dict(
-            random_seed=123,  # Just for reproducibility
+            random_seed=123,  # For reproducibility
         ),
     )
 
     while True:
-        prediction, metadata = tuner.predict()
+        prediction, request_id = tuning_instance.predict()
         app.set_config(prediction)
 
         metrics_monitor.start()  # To start monitoring the metrics of concern
@@ -258,7 +242,10 @@ def main():
         metrics = metrics_monitor.stop()
 
         reward = calculate_reward(metrics)
-        tuner.set_reward(reward, metatadata)
+
+        tuning_instance.store_reward(request_id, reward)
+
+        tuning_instance.set_reward(reward)
 
         # Optionally, you can stop once the metrics are good enough
         # which is indicated by a high reward
@@ -270,7 +257,7 @@ if __name__ == "__main__":
     main()
 ```
 
-For a working example, refer to [examples/hybrid_solver/main.py](examples/hybrid_solver/main.py).
+For a working example, refer to [oppertune-algorithms/examples/hybrid_solver/main.py](oppertune-algorithms/examples/hybrid_solver/main.py).
 
 ## Contributing
 
@@ -289,24 +276,25 @@ contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additio
 ### Setup
 
 ```bash
-pip install -e "./[dev]"
+pip install -e ".[dev]"
 ```
 
 ### Style guide
 
-To ensure your code follows the style guidelines, install `black>=23.1` and `isort>=5.11`
+To ensure your code follows the style guidelines, install `ruff`
 
 ```shell
-pip install black>=23.1
-pip install isort>=5.11
+pip install ruff --upgrade
 ```
 
 then run,
 
 ```shell
-isort . --sp=pyproject.toml
-black . --config=pyproject.toml
+ruff check
+ruff format
 ```
+
+and make sure that all warnings are addressed.
 
 ## Trademarks
 

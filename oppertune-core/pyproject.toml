@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools >= 68.0", "wheel >= 0.42"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "oppertune-core"
+version = "0.2.0"
+authors = [{ name = "Karan Tandon", email = "karantandon@microsoft.com" }]
+description = "The core types used by OPPerTune"
+readme = "README.md"
+requires-python = ">= 3.8"
+keywords = ["oppertune", "oppertune-client"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+dependencies = ["typing-extensions ~= 4.7"]
+
+[project.urls]
+Homepage = "https://aka.ms/OPPerTune"
+Code = "https://dev.azure.com/msri/OneCOGS/_git/SelfTune?path=/src/client/python"
+
+[project.optional-dependencies]
+dev = ["ruff ~= 0.11", "setuptools"]
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+extend-select = [
+    "ANN",    # flake8-annotations
+    "B",      # flake8-bugbear
+    "A",      # flake8-builtins
+    "C4",     # flake8-comprehensions
+    "T",      # flake8-debugger, flake8-print
+    "Q",      # flake8-quotes
+    "SIM",    # flake8-simplify
+    "RET503", # implicit-return
+    "I",      # isort
+    "C90",    # mccabe
+    "N",      # pep8-naming
+    "E",      # pycodestyle
+    "W",      # pycodestyle warnings
+    "D",      # pydocstyle
+    "F",      # Pyflakes
+    "UP",     # pyupgrade
+]
+ignore = [
+    "ANN204", # Missing return type annotation for special method
+    "D105",   # Missing docstring in magic method
+    "UP036",  # Version block is outdated for minimum Python version
+]
+mccabe = { max-complexity = 14 }
+pydocstyle = { convention = "google" }
